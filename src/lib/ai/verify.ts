@@ -52,12 +52,13 @@ function parseNumbers(text: string) {
     const year = !dollar && value >= 2020 && value <= 2035 && Number.isInteger(value);
     const quarter = /q$/i.test(before.trim().slice(-1));
     const windowDays = !dollar && [7, 14, 30, 60, 90].includes(value) && /^\s*(-|–)?\s*days?\b/.test(after) && /(next|last|past|coming|within|in|over|the|first|every)\s*$/i.test(text.slice(Math.max(0, idx - 10), idx));
+    const hyphenWindow = !dollar && /^-(day|week|month|year)\b/.test(after) && [7, 14, 30, 45, 60, 90, 120, 180, 365, 3, 6, 12].includes(value);
     const months = !dollar && /^\s*(-)?\s*months?\b/.test(after) && [3, 6, 12].includes(value);
     const ofDenominator = /\bof\s*$/i.test(text.slice(Math.max(0, idx - 4), idx)) && [5, 8, 10, 100].includes(value);
     const afterSlash = /\/\s*$/.test(before) && [5, 8, 10, 100].includes(value);
     const ordinal = /^(st|nd|rd|th)\b/.test(after);
     const wordy = /^\s*-?\s*(minutes?|min|weeks?|business days?|calls?|sessions?|steps?)\b/.test(after) && value <= 90 && !dollar;
-    out.push({ raw: raw.trim(), value, kind, structural: year || quarter || windowDays || months || ofDenominator || afterSlash || ordinal || wordy });
+    out.push({ raw: raw.trim(), value, kind, structural: year || quarter || windowDays || months || ofDenominator || afterSlash || ordinal || wordy || hyphenWindow });
   }
   return out;
 }
@@ -98,6 +99,8 @@ export function checkClaim(claim: Claim, path: string, metrics: Metric[]): Claim
   for (const n of factual) if (!n.matched) reasons.push(`${n.raw} does not match any cited metric`);
   if (!cited.length && !factual.length) reasons.push("No metric cited");
   if (path.startsWith("email.") && claim.metricIds.some(isInternal)) reasons.push("Email cites an internal-only metric");
+  else if (path.startsWith("qbr.") && !path.startsWith("qbr.risks") && claim.metricIds.some(isInternal))
+    reasons.push("Internal-only metric outside the internal risk notes");
   let status: ClaimStatus;
   if (reasons.length) status = "unverified";
   else if (factual.length === 0) status = "qualitative";
@@ -120,7 +123,7 @@ export function verifyDraft(draft: Draft, metrics: Metric[]): Verification {
   q.recommendations.forEach((r, i) => checks.push(checkClaim(r.rationale, `qbr.recommendations[${i}]`, metrics)));
   // Headline and subject carry no citations; any number in them must exist somewhere in the registry.
   for (const [p, text] of [["qbr.headline", q.headline], ["email.subject", draft.email.subject]] as const) {
-    const pool = p === "email.subject" ? metrics.filter((m) => !isInternal(m.id)) : metrics;
+    const pool = metrics.filter((m) => !isInternal(m.id));
     checks.push(checkClaim({ text, metricIds: pool.map((m) => m.id) }, p, metrics));
   }
   const facts = checks.flatMap((c) => c.numbers.filter((n) => !n.structural));

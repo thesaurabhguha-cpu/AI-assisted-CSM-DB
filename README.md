@@ -2,7 +2,7 @@
 
 Retain OS scores a book of B2B SaaS accounts, flags the ones a normal health score misses, and drafts a fact-checked executive business review (QBR/EBR) and save-play email for each account.
 
-**Live demo:** _link added on deploy_ · All companies, people and numbers are synthetic.
+**Live demo:** https://retain-os-phi.vercel.app · All companies, people and numbers are synthetic.
 
 ## What it does
 

@@ -50,3 +50,17 @@ describe("fact verifier", () => {
     expect(p).toContain("untrusted");
   });
 });
+
+describe("verifier scope rules", () => {
+  const x = assess(getBook()[0]);
+  const { metrics } = buildMetrics(x);
+  it("treats hyphenated windows as structural", () => {
+    const r = checkClaim({ text: "Weekly active users show a 90-day change of +1%.", metricIds: ["usage_trend_90d"] }, "qbr.adoption[0]", metrics);
+    expect(r.status).toBe("verified");
+  });
+  it("flags internal metrics outside the risk notes", () => {
+    const hs = metrics.find((m) => m.id === "health_score")!;
+    expect(checkClaim({ text: `Health score is ${hs.display}.`, metricIds: ["health_score"] }, "qbr.executiveSummary[0]", metrics).status).toBe("unverified");
+    expect(checkClaim({ text: `Health score is ${hs.display}.`, metricIds: ["health_score"] }, "qbr.risks[0]", metrics).status).toBe("verified");
+  });
+});
