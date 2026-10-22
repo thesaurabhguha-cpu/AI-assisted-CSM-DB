@@ -23,6 +23,11 @@ describe("fact verifier", () => {
     const r = checkClaim({ text: `ARR is ${m("arr").display}.`, metricIds: ["seat_util"] }, "t", metrics);
     expect(r.status).toBe("unverified");
   });
+  it("accepts numbers found inside a cited driver or goal", () => {
+    const d = metrics.find((q) => q.id === "goal_1")!;
+    const n = d.display.match(/\d+/)?.[0];
+    if (n) expect(checkClaim({ text: `The goal targets ${n}% less time.`, metricIds: ["goal_1"] }, "t", metrics).status).toBe("verified");
+  });
   it("rejects unknown metric ids", () => {
     const r = checkClaim({ text: "Strong quarter.", metricIds: ["made_up"] }, "t", metrics);
     expect(r.status).toBe("unverified");

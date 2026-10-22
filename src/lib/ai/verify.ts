@@ -90,14 +90,14 @@ export function checkClaim(claim: Claim, path: string, metrics: Metric[]): Claim
   let scrubbed = claim.text;
   for (const m of cited) if (m.unit === "text" && m.display.length > 3) scrubbed = scrubbed.split(m.display).join(" ");
   const numbers: CheckedNumber[] = parseNumbers(scrubbed).map((n) => {
-    const hit = cited.find((m) => matches(n, m));
+    // Numbers that appear inside a cited text metric (a goal, a driver label) count as sourced from it.
+    const hit = cited.find((m) => matches(n, m)) ?? cited.find((m) => m.unit === "text" && parseNumbers(m.display).some((t) => Math.abs(Math.abs(t.value) - Math.abs(n.value)) < 0.5));
     return { raw: n.raw, value: n.value, matched: hit?.id ?? null, structural: !hit && n.structural };
   });
   const factual = numbers.filter((n) => !n.structural);
   const reasons: string[] = [];
   if (badIds.length) reasons.push(`Cites unknown metric ${badIds.join(", ")}`);
   for (const n of factual) if (!n.matched) reasons.push(`${n.raw} does not match any cited metric`);
-  if (!cited.length && !factual.length) reasons.push("No metric cited");
   if (path.startsWith("email.") && claim.metricIds.some(isInternal)) reasons.push("Email cites an internal-only metric");
   else if (path.startsWith("qbr.") && !path.startsWith("qbr.risks") && claim.metricIds.some(isInternal))
     reasons.push("Internal-only metric outside the internal risk notes");

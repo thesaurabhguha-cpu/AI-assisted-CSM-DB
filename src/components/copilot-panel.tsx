@@ -213,7 +213,7 @@ function ClaimLine({ claim, check, metrics }: { claim: Claim; check?: ClaimCheck
       <p className="leading-relaxed">
         <span
           className={`mr-2 inline-block w-4 text-center no-print ${status === "verified" ? "text-moss" : status === "unverified" ? "text-ochre" : "text-ink-3"}`}
-          title={status === "verified" ? "Every number matches a cited metric" : status === "unverified" ? "Needs review" : "No figures to check; cites its sources"}
+          title={status === "verified" ? "Every number matches a cited metric" : status === "unverified" ? "Needs review" : "No figures to check"}
           aria-label={status}
         >
           {status === "verified" ? "✓" : status === "unverified" ? "!" : "○"}
