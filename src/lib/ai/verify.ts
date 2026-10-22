@@ -23,7 +23,7 @@ export interface ClaimCheck {
   reasons: string[];
 }
 
-export const INTERNAL_METRICS = new Set(["health_score", "health_band", "churn_probability", "arr_at_risk"]);
+export const INTERNAL_METRICS = new Set(["health_score", "health_band", "churn_probability", "arr_at_risk", "arr"]);
 const isInternal = (id: string) => INTERNAL_METRICS.has(id) || id.startsWith("driver_") || id.startsWith("component_");
 
 export interface Verification {

@@ -49,8 +49,17 @@ export function UsageChart({ weekly, seats, events }: { weekly: number[]; seats:
           if (i < 0) return null;
           return (
             <g key={ev.label + ev.weeksAgo}>
-              <line x1={x(i)} x2={x(i)} y1={M.t} y2={H - M.b} stroke="var(--ochre)" strokeOpacity={0.55} strokeDasharray="2 3" />
-              <circle cx={x(i)} cy={M.t + 4} r={4} fill="var(--ochre)" />
+              <line x1={x(i)} x2={x(i)} y1={M.t + 8} y2={H - M.b} stroke="var(--ochre)" strokeOpacity={0.7} strokeDasharray="2 3" />
+              <circle cx={x(i)} cy={y(weekly[i])} r={5} fill="var(--ochre)" stroke="var(--surface)" strokeWidth={2} />
+              <text
+                x={x(i) + (x(i) > W * 0.8 ? -6 : 6)}
+                y={M.t + 4 + (events.indexOf(ev) % 2) * 14}
+                textAnchor={x(i) > W * 0.8 ? "end" : "start"}
+                className="fill-ochre"
+                style={{ fontSize: 11, fontWeight: 500 }}
+              >
+                {ev.label}
+              </text>
             </g>
           );
         })}

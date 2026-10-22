@@ -21,7 +21,7 @@ export interface CopilotResult {
 const PER_IP_DAILY = Number(process.env.LIVE_RUNS_PER_IP_PER_DAY ?? 5);
 const GLOBAL_DAILY = Number(process.env.LIVE_RUNS_GLOBAL_PER_DAY ?? 200);
 const DAY = 86_400;
-const PROMPT_VERSION = "v4";
+const PROMPT_VERSION = "v5";
 
 export async function runCopilot(x: Assessment, ip: string, opts: { forceDeterministic?: boolean } = {}): Promise<CopilotResult> {
   const { metrics, unknowns } = buildMetrics(x);

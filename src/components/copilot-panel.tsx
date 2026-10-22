@@ -2,7 +2,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import type { Metric } from "@/lib/ai/metrics";
-import type { Claim, Draft } from "@/lib/ai/schema";
+import type { Claim, Draft, Recommendation } from "@/lib/ai/schema";
 import type { ClaimCheck, Verification } from "@/lib/ai/verify";
 import type { AccountSnapshot } from "@/lib/types";
 
@@ -24,6 +24,12 @@ const STAGES = [
 ] as const;
 
 type Phase = "idle" | "running" | "done" | "error";
+type Tab = "brief" | "qbr" | "email";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "brief", label: "Internal brief" },
+  { key: "qbr", label: "Customer QBR" },
+  { key: "email", label: "Save-play email" },
+];
 
 export function CopilotPanel({
   accountId,
@@ -41,7 +47,7 @@ export function CopilotPanel({
   const [step, setStep] = useState(-1);
   const [res, setRes] = useState<ApiResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<"qbr" | "email">("qbr");
+  const [tab, setTab] = useState<Tab>("brief");
 
   async function run(mode?: "deterministic") {
     setPhase("running");
@@ -64,7 +70,7 @@ export function CopilotPanel({
       await tick(4, 450);
       setRes(body as ApiResult);
       setPhase("done");
-      setTab("qbr");
+      setTab("brief");
     } catch (e) {
       setErr((e as Error).message);
       setPhase("error");
@@ -84,7 +90,7 @@ export function CopilotPanel({
         <div className="max-w-[60ch]">
           <h2 id="copilot-h" className="text-2xl font-semibold tracking-tight">Co-pilot</h2>
           <p className="text-ink-2 mt-1.5">
-            Drafts an executive business review and a save-play email for {accountName}. Every number in the draft is checked against the account data before you see it.
+            Drafts an internal save-play brief, a customer-facing QBR, and a save-play email for {accountName}. Every number in the draft is checked against the account data before you see it.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -143,19 +149,22 @@ export function CopilotPanel({
             <SourceBar res={res} onDeterministic={() => run("deterministic")} />
 
             <div className="no-print mt-5 flex gap-1 border-b border-line-soft" role="tablist">
-              {(["qbr", "email"] as const).map((t) => (
+              {TABS.map((t) => (
                 <button
-                  key={t}
+                  key={t.key}
                   role="tab"
-                  aria-selected={tab === t}
-                  onClick={() => setTab(t)}
-                  className={`px-4 py-2 -mb-px border-b-2 ${tab === t ? "border-lilac text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
+                  aria-selected={tab === t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`px-4 py-2 -mb-px border-b-2 ${tab === t.key ? "border-lilac text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
                 >
-                  {t === "qbr" ? "Business review" : "Save-play email"}
+                  {t.label}
                 </button>
               ))}
             </div>
 
+            <div className={tab === "brief" ? "" : "hidden print:block"}>
+              <BriefDoc res={res} accountName={accountName} />
+            </div>
             <div className={tab === "qbr" ? "" : "hidden print:block"}>
               <QbrDoc res={res} accountName={accountName} />
             </div>
@@ -189,7 +198,7 @@ function SourceBar({ res, onDeterministic }: { res: ApiResult; onDeterministic: 
         </p>
         <p className="mt-1 text-ink-3">
           {res.source.kind === "gemini"
-            ? `Drafted by ${res.source.model}${res.source.cached ? " (cached result)" : ""}.`
+            ? <>Drafted by <a href={modelDocUrl(res.source.model)} target="_blank" rel="noreferrer" className="num underline underline-offset-4 decoration-line hover:text-ink">{res.source.model}</a>{res.source.cached ? " (cached result)" : ""}.</>
             : res.source.reason}
           {res.source.kind === "gemini" && (
             <> <button onClick={onDeterministic} className="underline underline-offset-4 hover:text-ink">Compare with the deterministic draft</button></>
@@ -226,8 +235,8 @@ function ClaimLine({ claim, check, metrics }: { claim: Claim; check?: ClaimCheck
       {cited.length > 0 && (
         <p className="no-print mt-1 ml-6 flex flex-wrap gap-1.5">
           {cited.slice(0, 6).map((m) => (
-            <span key={m.id} title={m.label} className="num text-[11px] rounded border border-line-soft px-1.5 py-0.5 text-ink-3">
-              {m.id} <span className="text-ink-2">{m.display.length > 28 ? m.display.slice(0, 26) + "…" : m.display}</span>
+            <span key={m.id} title={`${m.label}: ${m.display}`} className="num text-[11px] rounded border border-line-soft px-1.5 py-0.5 text-ink-3">
+              {m.id} <span className="text-ink-2">{clip(m.display, 28)}</span>
             </span>
           ))}
         </p>
@@ -236,57 +245,82 @@ function ClaimLine({ claim, check, metrics }: { claim: Claim; check?: ClaimCheck
   );
 }
 
-function QbrDoc({ res, accountName }: { res: ApiResult; accountName: string }) {
-  const q = res.draft.qbr;
+function DocSection({ title, path, list, res }: { title: string; path: string; list: Claim[]; res: ApiResult }) {
   const get = useChecks(res);
-  const section = (title: string, key: keyof typeof q, list: Claim[]) => (
+  if (!list.length) return null;
+  return (
     <section className="mt-7">
       <h4 className="font-semibold text-lg">{title}</h4>
       <div className="mt-2.5 space-y-2.5">
-        {list.map((c, i) => <ClaimLine key={i} claim={c} check={get(`qbr.${String(key)}[${i}]`)} metrics={res.metrics} />)}
+        {list.map((c, i) => <ClaimLine key={i} claim={c} check={get(`${path}[${i}]`)} metrics={res.metrics} />)}
       </div>
     </section>
   );
+}
+
+function ActionTable({ res, title, include }: { res: ApiResult; title: string; include: (owner: Recommendation["owner"]) => boolean }) {
+  const get = useChecks(res);
+  const rows = res.draft.qbr.recommendations.map((r, i) => ({ r, i })).filter(({ r }) => include(r.owner));
+  if (!rows.length) return null;
   return (
-    <article className="print-doc mt-6 rounded-xl bg-[#1a0f25] border border-line-soft p-6 sm:p-9 max-w-[860px]">
-      <p className="text-sm text-ink-3">Executive business review, {accountName}</p>
-      <h3 className="mt-2 text-[clamp(1.6rem,3vw,2.2rem)] leading-tight font-semibold tracking-tight">{q.headline}</h3>
-      {section("Summary", "executiveSummary", q.executiveSummary)}
-      {section("Value delivered", "valueDelivered", q.valueDelivered)}
-      {section("Adoption", "adoption", q.adoption)}
-      {section("Risks (internal)", "risks", q.risks)}
-      <section className="mt-7">
-        <h4 className="font-semibold text-lg">Recommended actions</h4>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="text-left text-ink-3 border-b border-line-soft">
-                <th className="font-normal py-2 pr-4">Action</th>
-                <th className="font-normal py-2 pr-4">Owner</th>
-                <th className="font-normal py-2 pr-4">When</th>
-                <th className="font-normal py-2">Why</th>
-              </tr>
-            </thead>
-            <tbody>
-              {q.recommendations.map((r, i) => {
-                const ck = get(`qbr.recommendations[${i}]`);
-                return (
-                  <tr key={i} className="border-b border-line-soft/60 align-top">
-                    <td className="py-2.5 pr-4 font-medium">{r.action}</td>
-                    <td className="py-2.5 pr-4 text-ink-2">{r.owner}</td>
-                    <td className="py-2.5 pr-4 text-ink-2 whitespace-nowrap">{r.timeframe}</td>
-                    <td className={`py-2.5 ${ck?.status === "unverified" ? "text-ochre" : "text-ink-2"}`}>
-                      {r.rationale.text}
-                      {ck?.status === "unverified" && <span className="block text-xs">{ck.reasons.join("; ")}</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {section("What we need from you", "asks", q.asks)}
+    <section className="mt-7">
+      <h4 className="font-semibold text-lg">{title}</h4>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-sm min-w-[520px]">
+          <thead>
+            <tr className="text-left text-ink-3 border-b border-line-soft">
+              <th className="font-normal py-2 pr-4">Action</th>
+              <th className="font-normal py-2 pr-4">Owner</th>
+              <th className="font-normal py-2 pr-4">When</th>
+              <th className="font-normal py-2">Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ r, i }) => {
+              const ck = get(`qbr.recommendations[${i}]`);
+              return (
+                <tr key={i} className="border-b border-line-soft/60 align-top">
+                  <td className="py-2.5 pr-4 font-medium">{r.action}</td>
+                  <td className="py-2.5 pr-4 text-ink-2">{r.owner}</td>
+                  <td className="py-2.5 pr-4 text-ink-2 whitespace-nowrap">{r.timeframe}</td>
+                  <td className={`py-2.5 ${ck?.status === "unverified" ? "text-ochre" : "text-ink-2"}`}>
+                    {r.rationale.text}
+                    {ck?.status === "unverified" && <span className="block text-xs">{ck.reasons.join("; ")}</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// Internal only: risk, ARR exposure, model drivers, full CSM action plan.
+function BriefDoc({ res, accountName }: { res: ApiResult; accountName: string }) {
+  const q = res.draft.qbr;
+  const m = (id: string) => res.metrics.find((x) => x.id === id)?.display;
+  const facts = [
+    ["ARR", m("arr")],
+    ["ARR at risk", m("arr_at_risk")],
+    ["Health score", m("health_score")],
+    ["Churn probability", m("churn_probability")],
+    ["Renewal", m("days_to_renewal")],
+  ].filter((f): f is [string, string] => !!f[1]);
+  return (
+    <article className="print-doc mt-6 rounded-xl border border-brick/40 bg-[#1a0f25] p-6 sm:p-9 max-w-[860px]">
+      <p className="text-xs uppercase tracking-[0.14em] text-brick">Internal, do not share with the customer</p>
+      <h3 className="mt-2 text-[clamp(1.5rem,2.8vw,2rem)] leading-tight font-semibold tracking-tight">Account brief and save-play, {accountName}</h3>
+      {facts.length > 0 && (
+        <dl className="mt-5 grid grid-cols-2 sm:grid-cols-5 gap-4 border-y border-line-soft py-4">
+          {facts.map(([k, v]) => (
+            <div key={k}><dt className="text-xs text-ink-3">{k}</dt><dd className="num text-lg mt-0.5">{v}</dd></div>
+          ))}
+        </dl>
+      )}
+      <DocSection title="Risk and drivers" path="qbr.risks" list={q.risks} res={res} />
+      <ActionTable res={res} title="CSM action plan" include={() => true} />
       <section className="mt-7">
         <h4 className="font-semibold text-lg">Missing data</h4>
         {q.unknowns.length ? (
@@ -296,10 +330,28 @@ function QbrDoc({ res, accountName }: { res: ApiResult; accountName: string }) {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-ink-2">No gaps in the data used for this review.</p>
+          <p className="mt-2 text-sm text-ink-2">No gaps in the data used for this brief.</p>
         )}
       </section>
-      <p className="mt-8 text-xs text-ink-3">Generated by Retain OS on synthetic data. {res.verification.factsVerified} of {res.verification.factsTotal} figures verified against source metrics.</p>
+      <p className="mt-8 text-xs text-ink-3">Generated by Retain OS on synthetic data. For the account team only.</p>
+    </article>
+  );
+}
+
+// Customer-facing: outcomes, adoption, joint next steps. No internal scores, ARR, or model output.
+function QbrDoc({ res, accountName }: { res: ApiResult; accountName: string }) {
+  const q = res.draft.qbr;
+  const shared = q.recommendations.some((r) => r.owner !== "CSM");
+  return (
+    <article className="print-doc print-break mt-6 rounded-xl bg-[#1a0f25] border border-line-soft p-6 sm:p-9 max-w-[860px]">
+      <p className="text-sm text-ink-3">Quarterly business review, {accountName}</p>
+      <h3 className="mt-2 text-[clamp(1.6rem,3vw,2.2rem)] leading-tight font-semibold tracking-tight">{q.headline}</h3>
+      <DocSection title="Summary" path="qbr.executiveSummary" list={q.executiveSummary} res={res} />
+      <DocSection title="Value delivered" path="qbr.valueDelivered" list={q.valueDelivered} res={res} />
+      <DocSection title="Adoption" path="qbr.adoption" list={q.adoption} res={res} />
+      <ActionTable res={res} title="Next steps together" include={(o) => (shared ? o !== "CSM" : true)} />
+      <DocSection title="What we need from you" path="qbr.asks" list={q.asks} res={res} />
+      <p className="no-print mt-8 text-xs text-ink-3">Customer-facing. Internal scores, ARR, and model output stay in the internal brief.</p>
     </article>
   );
 }
@@ -331,4 +383,16 @@ function EmailDoc({ res, champion }: { res: ApiResult; champion?: { name: string
       <p className="no-print mt-6 text-xs text-ink-3">Draft only. Nothing is sent from this demo.</p>
     </article>
   );
+}
+
+// Shorten at a word boundary so chips never end mid-word.
+function clip(text: string, max: number) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const sp = cut.lastIndexOf(" ");
+  return `${(sp > max * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s_,.;:-]+$/, "")}…`;
+}
+
+function modelDocUrl(model: string | null) {
+  return model?.startsWith("gemini") ? `https://ai.google.dev/gemini-api/docs/models/${model}` : "https://ai.google.dev/gemini-api/docs/models";
 }

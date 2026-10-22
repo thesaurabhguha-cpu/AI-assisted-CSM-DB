@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { AccountTable, type Row } from "@/components/account-table";
+import type { Row } from "@/components/account-table";
+import { BookExplorer } from "@/components/book-explorer";
 import { Stat } from "@/components/bits";
-import { Isotype } from "@/components/isotype";
 import { RiskRadar } from "@/components/risk-radar";
 import { getBook, VENDOR } from "@/lib/data/generate";
 import { assess, portfolioStats } from "@/lib/engine/assess";
@@ -28,6 +28,7 @@ export default function Home() {
     flag: r.flag,
     arrAtRisk: r.arrAtRisk,
     daysToRenewal: r.account.daysToRenewal,
+    group: r.flag === "silent-churn" ? "silent" : r.health.band === "healthy" ? "healthy" : r.health.band === "watch" ? "watch" : "risk",
     href: `/accounts/${r.account.id}`,
   }));
   const watchlist = [...rows].sort((a, b) => b.arrAtRisk - a.arrAtRisk).slice(0, 6);
@@ -66,8 +67,11 @@ export default function Home() {
         <Stat label="ARR at risk" value={usd(s.arrAtRisk)} sub="ARR × churn probability" tone="risk" />
         <Stat label="Hidden by green scores" value={usd(silentArr)} sub={`${n} silent-churn accounts`} tone="ai" />
         <Stat label="Renewing in 90 days" value={String(s.renewals90)} sub={`${usd(s.renewals90Arr)} ARR`} />
-        <Stat label="Model vs score" value={`${MODEL.metrics.aucModel.toFixed(2)} AUC`} sub={`Health score alone: ${MODEL.metrics.aucHealthScore.toFixed(2)}`} />
+        <Stat label="Model vs score" value={`${MODEL.metrics.aucModel.toFixed(2)} AUC`} sub={`Health score alone: ${MODEL.metrics.aucHealthScore.toFixed(2)}*`} />
       </section>
+      <p className="mt-2 text-xs text-ink-3 max-w-[90ch]">
+        * AUC on a held-out split of synthetic accounts. The generator links champion loss to churn by design, so this shows the model can pick up a signal the rules-based score underweights. It is not a claim about accuracy on real customer data. <Link href="/how-it-works" className="underline underline-offset-4 decoration-line hover:text-ink">Method</Link>
+      </p>
 
       {/* Radar + watchlist */}
       <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -80,6 +84,7 @@ export default function Home() {
             points={rows.map((r) => ({
               id: r.account.id, name: r.account.name, arr: r.account.arr, score: r.health.score,
               prob: r.churn.probability, band: r.health.band, flag: r.flag, href: `/accounts/${r.account.id}`,
+              driver: r.churn.drivers[0]?.logitContribution > 0 ? r.churn.drivers[0].label : undefined,
             }))}
           />
         </div>
@@ -106,31 +111,24 @@ export default function Home() {
         </aside>
       </section>
 
-      {/* Isotype */}
-      <section className="mt-14" aria-labelledby="iso-h">
-        <h2 id="iso-h" className="text-xl font-medium">Where the ARR sits</h2>
-        <p className="text-sm text-ink-3 mt-1 mb-6">Each square is $25k of ARR.</p>
-        <Isotype
-          groups={[
-            { key: "healthy", label: "Healthy and agreed", detail: "Score and model both say stay", arr: sumArr((r) => r.health.band === "healthy" && r.flag !== "silent-churn"), color: "var(--moss)" },
-            { key: "silent", label: "Silent churn", detail: "Green score, model says leaving", arr: silentArr, color: "var(--lilac-ink)", ring: true },
-            { key: "watch", label: "Watch", detail: "Score 50 to 69", arr: sumArr((r) => r.health.band === "watch"), color: "var(--ochre)" },
-            { key: "risk", label: "At risk", detail: "Score below 50", arr: sumArr((r) => r.health.band === "at-risk"), color: "var(--brick)" },
-          ]}
-        />
-      </section>
-
-      {/* Table */}
-      <section className="mt-14" aria-labelledby="book-h">
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-          <div>
-            <h2 id="book-h" className="text-xl font-medium">The book</h2>
-            <p className="text-sm text-ink-3 mt-1">Open any account to see why it scored the way it did and draft its review.</p>
+      <BookExplorer
+        rows={tableRows}
+        groups={[
+          { key: "healthy", label: "Healthy and agreed", detail: "Score and model both say stay", arr: sumArr((r) => r.health.band === "healthy" && r.flag !== "silent-churn"), color: "var(--moss)" },
+          { key: "silent", label: "Silent churn", detail: "Green score, model says leaving", arr: silentArr, color: "var(--lilac-ink)", ring: true },
+          { key: "watch", label: "Watch", detail: "Score 50 to 69", arr: sumArr((r) => r.health.band === "watch"), color: "var(--ochre)" },
+          { key: "risk", label: "At risk", detail: "Score below 50", arr: sumArr((r) => r.health.band === "at-risk"), color: "var(--brick)" },
+        ]}
+        tableHeader={
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+            <div>
+              <h2 id="book-h" className="text-xl font-medium">The book</h2>
+              <p className="text-sm text-ink-3 mt-1">Open any account to see why it scored the way it did and draft its review. Every column sorts.</p>
+            </div>
+            <Link href="/upload" className="text-sm rounded-lg border border-line px-3 py-1.5 hover:border-lilac">Score your own CSV</Link>
           </div>
-          <Link href="/upload" className="text-sm rounded-lg border border-line px-3 py-1.5 hover:border-lilac">Score your own CSV</Link>
-        </div>
-        <AccountTable rows={tableRows} />
-      </section>
+        }
+      />
     </div>
   );
 }

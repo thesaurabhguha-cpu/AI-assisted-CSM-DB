@@ -17,6 +17,7 @@ export interface Row {
   flag: Flag;
   arrAtRisk: number;
   daysToRenewal: number;
+  group?: string;
   href?: string;
 }
 
@@ -30,17 +31,38 @@ const COLS: { key: Key; label: string; num?: boolean }[] = [
   { key: "daysToRenewal", label: "Renewal", num: true },
 ];
 
-export function AccountTable({ rows, onSelect, selected }: { rows: Row[]; onSelect?: (id: string) => void; selected?: string | null }) {
+export function AccountTable({
+  rows,
+  onSelect,
+  selected,
+  group,
+  groupLabel,
+  onClearGroup,
+}: {
+  rows: Row[];
+  onSelect?: (id: string) => void;
+  selected?: string | null;
+  group?: string | null;
+  groupLabel?: string;
+  onClearGroup?: () => void;
+}) {
+  const [q, setQ] = useState("");
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: "arrAtRisk", dir: -1 });
   const [filter, setFilter] = useState<"all" | "flagged" | Band>("all");
   const shown = useMemo(() => {
-    const f = rows.filter((r) => (filter === "all" ? true : filter === "flagged" ? r.flag !== null : r.band === filter));
+    const needle = q.trim().toLowerCase();
+    const f = rows.filter(
+      (r) =>
+        (filter === "all" ? true : filter === "flagged" ? r.flag !== null : r.band === filter) &&
+        (!group || r.group === group) &&
+        (!needle || [r.name, r.segment, r.industry, r.band, r.flag ?? ""].some((v) => v.toLowerCase().includes(needle))),
+    );
     return [...f].sort((a, b) => {
       const va = a[sort.key];
       const vb = b[sort.key];
       return (typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number)) * sort.dir;
     });
-  }, [rows, sort, filter]);
+  }, [rows, sort, filter, group, q]);
 
   const FILTERS: { k: typeof filter; label: string }[] = [
     { k: "all", label: `All ${rows.length}` },
@@ -52,7 +74,18 @@ export function AccountTable({ rows, onSelect, selected }: { rows: Row[]; onSele
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Filter accounts">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <label className="relative grow sm:grow-0 sm:w-72">
+        <span className="sr-only">Search accounts</span>
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search account, segment, industry"
+          className="w-full rounded-full border border-line bg-transparent px-4 py-1.5 text-sm placeholder:text-ink-3 focus:border-lilac outline-none"
+        />
+      </label>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter accounts">
         {FILTERS.map((f) => (
           <button
             key={f.k}
@@ -63,6 +96,13 @@ export function AccountTable({ rows, onSelect, selected }: { rows: Row[]; onSele
             {f.label}
           </button>
         ))}
+      </div>
+      {group && (
+        <button onClick={onClearGroup} className="rounded-full border border-lilac/60 bg-lilac/10 px-3 py-1 text-sm text-lilac-ink hover:brightness-110">
+          {groupLabel ?? group} ×
+        </button>
+      )}
+      <span className="ml-auto text-xs text-ink-3 num" aria-live="polite">{shown.length} shown</span>
       </div>
       <div className="overflow-x-auto panel">
         <table className="w-full text-sm min-w-[760px]">
@@ -119,7 +159,7 @@ export function AccountTable({ rows, onSelect, selected }: { rows: Row[]; onSele
               );
             })}
             {shown.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-3">No accounts match this filter.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-3">No accounts match these filters.</td></tr>
             )}
           </tbody>
         </table>

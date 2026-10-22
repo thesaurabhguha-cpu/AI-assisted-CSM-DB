@@ -17,14 +17,14 @@ export function deterministicDraft(x: Assessment, metrics: Metric[], unknowns: {
   const firstName = a.champion?.name.split(" ")[0] ?? "there";
 
   const exec: Claim[] = [
-    c(`${a.name} is on the ${d("plan")} plan at ${d("arr")} ARR with ${d("seats_active")} of ${d("seats_purchased")} seats active (${d("seat_util")}) and renewal in ${d("days_to_renewal")}.`, "plan", "arr", "seats_active", "seats_purchased", "seat_util", "days_to_renewal"),
+    c(`${a.name} is on the ${d("plan")} plan with ${d("seats_active")} of ${d("seats_purchased")} seats active (${d("seat_util")}) and renewal in ${d("days_to_renewal")}.`, "plan", "seats_active", "seats_purchased", "seat_util", "days_to_renewal"),
   ];
   if (x.flag === "silent-churn")
-    exec.push(c(`Usage looks strong, but the champion changed in the last 90 days and no executive sponsor is engaged, so the relationship needs rebuilding before renewal.`, "champion_changed", "exec_sponsor", "dau_mau"));
+    exec.push(c(`Your team has a new point of contact this quarter, so this review re-confirms goals and owners before renewal.`, "champion_changed", "exec_sponsor"));
   else if (trend <= -20)
-    exec.push(c(`Weekly active users changed ${d("usage_trend_90d")} over 90 days, the clearest sign that the team is moving work elsewhere.`, "usage_trend_90d"));
+    exec.push(c(`Weekly active users changed ${d("usage_trend_90d")} over 90 days, so this review focuses on where the team is getting value and where it is not.`, "usage_trend_90d"));
   else if (Number(get("p1_90d")?.value ?? 0) >= 2)
-    exec.push(c(`${d("p1_90d")} P1 incidents in 90 days and ${d("tickets_open")} open tickets are the main drag on the experience.`, "p1_90d", "tickets_open"));
+    exec.push(c(`${d("p1_90d")} P1 incidents in 90 days and ${d("tickets_open")} open tickets affected your team, and resolving them is the first priority.`, "p1_90d", "tickets_open"));
   else if (util >= 95)
     exec.push(c(`The team is using ${d("seat_util")} of purchased seats, so growth is now limited by seat count rather than adoption.`, "seat_util"));
   else exec.push(c(`Adoption is steady at ${d("features_adopted")} core features with ${d("dau_mau")} daily stickiness.`, "features_adopted", "dau_mau"));
@@ -43,7 +43,7 @@ export function deterministicDraft(x: Assessment, metrics: Metric[], unknowns: {
     risks.push(c(`Internal: the health score reads ${d("health_score")} (${d("health_band")}), yet the churn model puts 12-month churn at ${d("churn_probability")}, driven by ${d("driver_1")} and ${d("driver_2")}.`, "health_score", "health_band", "churn_probability", "driver_1", "driver_2"));
   else
     risks.push(c(`Internal: health score ${d("health_score")} and model churn probability ${d("churn_probability")}, top driver ${d("driver_1")}.`, "health_score", "churn_probability", "driver_1"));
-  risks.push(c(`ARR at risk is ${d("arr_at_risk")} with renewal in ${d("days_to_renewal")}.`, "arr_at_risk", "days_to_renewal"));
+  risks.push(c(`ARR at risk is ${d("arr_at_risk")} of ${d("arr")} ARR with renewal in ${d("days_to_renewal")}.`, "arr_at_risk", "arr", "days_to_renewal"));
   if (Number(get("late_payments_12m")?.value ?? 0) > 0)
     risks.push(c(`${d("late_payments_12m")} late payment(s) in the last 12 months.`, "late_payments_12m"));
 
@@ -70,7 +70,7 @@ export function deterministicDraft(x: Assessment, metrics: Metric[], unknowns: {
 
   return {
     qbr: {
-      headline: x.flag === "silent-churn" ? `${a.name}: healthy usage, fragile relationship` : `${a.name}: ${x.health.band === "healthy" ? "on track" : x.health.band === "watch" ? "needs attention" : "at risk"} ahead of renewal`,
+      headline: `${a.name}: results so far and priorities for the next quarter`,
       executiveSummary: exec,
       valueDelivered: value,
       adoption,
